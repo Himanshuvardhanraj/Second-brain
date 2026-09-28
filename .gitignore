@@ -1,0 +1,29 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Vercel
+.vercel/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local data
+data/
+notebook/
+
+# OS
+.DS_Store
+
