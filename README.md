@@ -307,14 +307,14 @@ pip install -r requirements.txt
 
 Create .env:
 
-GEMINI_API_KEY=your_gemini_api_key
+GEMINI_API_KEY=your_rotated_gemini_api_key
 GEMINI_MODEL=gemini-3.5-flash-lite
 
 GEMINI_EMBEDDING_MODEL=gemini-embedding-2
 EMBEDDING_DIMENSION=768
 
 SUPABASE_URL=your_supabase_url
-SUPABASE_SECRET_KEY=your_supabase_secret_key
+SUPABASE_SECRET_KEY=your_rotated_supabase_secret_key
 
 FRONTEND_URL=http://localhost:5173
 JWT_SECRET_KEY=replace_with_a_long_random_secret
@@ -347,6 +347,12 @@ to the Vercel frontend URL (plus `http://localhost:5173` when developing
 locally). Vercel environment variables must be configured separately for
 Preview and Production deployments, and a new deployment is required after
 changing them.
+
+Never paste secret values into source files, GitHub issues, pull requests, or
+frontend `VITE_*` variables. Rotate any key that has been exposed, then store
+the replacement only in local `.env` files or Vercel's encrypted backend
+environment variables. The frontend must never receive `GEMINI_API_KEY` or
+`SUPABASE_SECRET_KEY`.
 
 
 👨‍💻 Author
