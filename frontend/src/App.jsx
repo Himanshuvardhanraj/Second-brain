@@ -122,9 +122,17 @@ function App() {
   const saveChat = async (messageIndex) => {
     const answer = messages[messageIndex];
     const previous = messages[messageIndex - 1];
+    if (answer.saved) return;
+    const question = previous?.text || "Saved conversation";
+    const alreadySaved = notes.some((note) => note.question === question && note.answer === answer.text);
+    if (alreadySaved) {
+      setMessages((current) => current.map((message, index) => index === messageIndex ? { ...message, saved: true } : message));
+      setNotice("This chat is already in Notes.");
+      return;
+    }
     try {
-      const data = await api("/api/notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: previous?.text || "Saved conversation", answer: answer.text, sources: answer.sources || [] }) }, token);
-      setNotes((current) => [data.note, ...current]); setMessages((current) => current.map((message, index) => index === messageIndex ? { ...message, saved: true } : message)); setNotice("Saved to Notes");
+      const data = await api("/api/notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, answer: answer.text, sources: answer.sources || [] }) }, token);
+      setNotes((current) => data.already_saved ? current : [data.note, ...current]); setMessages((current) => current.map((message, index) => index === messageIndex ? { ...message, saved: true } : message)); setNotice(data.already_saved ? "This chat is already in Notes." : "Saved to Notes");
     } catch (err) { setNotice(err.message); }
   };
 

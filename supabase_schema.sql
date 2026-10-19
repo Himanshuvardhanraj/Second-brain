@@ -30,6 +30,17 @@ create table if not exists public.notes (
 create index if not exists notes_user_created_idx
   on public.notes (user_id, created_at desc);
 
+delete from public.notes duplicate
+using public.notes keeper
+where duplicate.id > keeper.id
+  and duplicate.user_id = keeper.user_id
+  and duplicate.question = keeper.question
+  and duplicate.answer = keeper.answer;
+
+-- Prevent future duplicate wishlist entries.
+create unique index if not exists notes_user_question_answer_uidx
+  on public.notes (user_id, question, answer);
+
 create table if not exists public.answer_feedback (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,

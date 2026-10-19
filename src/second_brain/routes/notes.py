@@ -23,7 +23,15 @@ def list_notes(user=Depends(current_user)):
             supabase.table("notes").select("*")
             .eq("user_id", user["sub"]).order("created_at", desc=True).execute()
         )
-        return {"notes": response.data or []}
+        notes = []
+        seen = set()
+        for note in response.data or []:
+            key = (note.get("question", "").strip(), note.get("answer", "").strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            notes.append(note)
+        return {"notes": notes}
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Could not load notes") from exc
 
@@ -31,6 +39,17 @@ def list_notes(user=Depends(current_user)):
 @router.post("")
 def save_note(note: NoteRequest, user=Depends(current_user)):
     try:
+        existing = (
+            supabase.table("notes").select("*")
+            .eq("user_id", user["sub"])
+            .eq("question", note.question)
+            .eq("answer", note.answer)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return {"note": existing.data[0], "already_saved": True}
+
         response = supabase.table("notes").insert({
             "user_id": user["sub"],
             "question": note.question,
@@ -38,7 +57,7 @@ def save_note(note: NoteRequest, user=Depends(current_user)):
             "sources": note.sources,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
-        return {"note": response.data[0] if response.data else None}
+        return {"note": response.data[0] if response.data else None, "already_saved": False}
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Could not save this chat") from exc
 
