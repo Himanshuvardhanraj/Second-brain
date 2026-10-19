@@ -1,11 +1,14 @@
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from second_brain.rag import RAGPipeline
 from second_brain.routes.documents import router as documents_router
+from second_brain.routes.auth import router as auth_router
+from second_brain.routes.notes import router as notes_router
+from second_brain.auth import current_user
 
 
 app = FastAPI(
@@ -48,7 +51,7 @@ def health():
 
 
 @app.post("/api/chat")
-def chat(request: QueryRequest):
+def chat(request: QueryRequest, user=Depends(current_user)):
 
     try:
 
@@ -68,3 +71,5 @@ def chat(request: QueryRequest):
 app.include_router(
     documents_router
 )
+app.include_router(auth_router)
+app.include_router(notes_router)

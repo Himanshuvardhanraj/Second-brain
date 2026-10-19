@@ -317,6 +317,11 @@ SUPABASE_URL=your_supabase_url
 SUPABASE_SECRET_KEY=your_supabase_secret_key
 
 FRONTEND_URL=http://localhost:5173
+JWT_SECRET_KEY=replace_with_a_long_random_secret
+JWT_EXPIRY_HOURS=24
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
 
 Run the API:
 
@@ -327,6 +332,15 @@ http://localhost:8000
 
 Swagger documentation:
 http://localhost:8000/docs
+
+### Authentication and notes setup
+
+Run `supabase_schema.sql` in the Supabase SQL editor before using Google login or
+the Notes feature. Configure a Google OAuth web client with the redirect URI
+above (and the deployed API callback URL in production). The frontend starts at
+a login screen; “Skip for now” creates a signed guest session. Both registered
+and guest sessions receive a JWT, and chat requests are rejected without one.
+Assistant responses can be saved to Notes using the wishlist button.
 
 
 👨‍💻 Author
