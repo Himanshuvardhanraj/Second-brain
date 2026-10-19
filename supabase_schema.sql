@@ -1,11 +1,16 @@
 create table if not exists public.users (
   id text primary key,
   email text unique,
+  username text unique,
   name text not null,
   avatar_url text,
-  provider text not null default 'google',
+  password_hash text,
+  provider text not null default 'password',
   updated_at timestamptz not null default now()
 );
+
+alter table public.users add column if not exists username text unique;
+alter table public.users add column if not exists password_hash text;
 
 create table if not exists public.notes (
   id uuid primary key default gen_random_uuid(),

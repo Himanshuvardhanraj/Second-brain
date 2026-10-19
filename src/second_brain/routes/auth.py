@@ -1,34 +1,43 @@
-import os
-
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 
 from second_brain.auth import (
     create_guest_token,
+    create_local_user,
+    authenticate_local_user,
     create_token,
     current_user,
-    google_authorization_url,
-    exchange_google_code,
-    upsert_google_user,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.get("/google")
-def google_login():
-    return {"url": google_authorization_url()}
+class Credentials(BaseModel):
+    user_id: str = Field(min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=8, max_length=128)
+    name: str | None = Field(default=None, max_length=100)
 
 
-@router.get("/google/callback")
-def google_callback(code: str = Query(...)):
-    profile = exchange_google_code(code)
-    user = upsert_google_user(profile)
-    token = create_token(str(user["id"]), user.get("email"), user["name"])
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-    return RedirectResponse(
-        f"{frontend_url}/login/callback?token={token}"
+@router.post("/signup")
+def signup(credentials: Credentials):
+    user = create_local_user(
+        credentials.user_id,
+        credentials.name or credentials.user_id,
+        credentials.password,
     )
+    return {
+        "access_token": create_token(user["id"], None, user["name"]),
+        "user": {"id": user["id"], "name": user["name"], "email": None, "is_guest": False},
+    }
+
+
+@router.post("/login")
+def login(credentials: Credentials):
+    user = authenticate_local_user(credentials.user_id, credentials.password)
+    return {
+        "access_token": create_token(user["id"], None, user["name"]),
+        "user": {"id": user["id"], "name": user["name"], "email": None, "is_guest": False},
+    }
 
 
 @router.post("/guest")

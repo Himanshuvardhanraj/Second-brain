@@ -1,5 +1,8 @@
 import os
 import uuid
+import base64
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 from urllib.parse import urlencode
@@ -17,6 +20,23 @@ JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.getenv("JWT_SECRET_KEY", "change-this-secret-in-production")
 TOKEN_TTL_HOURS = int(os.getenv("JWT_EXPIRY_HOURS", "24"))
 bearer = HTTPBearer(auto_error=False)
+
+
+def hash_password(password: str) -> str:
+    salt = os.urandom(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+    return f"scrypt${base64.urlsafe_b64encode(salt).decode()}${base64.urlsafe_b64encode(digest).decode()}"
+
+
+def verify_password(password: str, encoded: str) -> bool:
+    try:
+        _, salt_text, digest_text = encoded.split("$")
+        salt = base64.urlsafe_b64decode(salt_text.encode())
+        expected = base64.urlsafe_b64decode(digest_text.encode())
+        actual = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+        return hmac.compare_digest(actual, expected)
+    except (ValueError, TypeError):
+        return False
 
 
 def create_token(user_id: str, email: str | None, name: str, is_guest: bool = False) -> str:
@@ -59,6 +79,37 @@ def create_guest_token() -> Dict[str, Any]:
         "access_token": create_token(guest_id, None, "Guest", is_guest=True),
         "user": {"id": guest_id, "name": "Guest", "email": None, "is_guest": True},
     }
+
+
+def create_local_user(user_id: str, name: str, password: str) -> Dict[str, Any]:
+    user = {
+        "id": user_id,
+        "email": None,
+        "username": user_id,
+        "name": name,
+        "password_hash": hash_password(password),
+        "provider": "password",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        response = supabase.table("users").insert(user).execute()
+        return response.data[0] if response.data else user
+    except Exception as exc:
+        message = str(exc).lower()
+        if "duplicate" in message or "unique" in message:
+            raise HTTPException(status_code=409, detail="That user ID is already registered") from exc
+        raise HTTPException(status_code=502, detail="Could not create account") from exc
+
+
+def authenticate_local_user(user_id: str, password: str) -> Dict[str, Any]:
+    try:
+        response = supabase.table("users").select("*").eq("id", user_id).eq("provider", "password").limit(1).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not access the account database") from exc
+    user = response.data[0] if response.data else None
+    if not user or not verify_password(password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid user ID or password")
+    return user
 
 
 def google_authorization_url() -> str:

@@ -17,17 +17,19 @@ app = FastAPI(
 )
 
 
-frontend_url = os.getenv(
-    "FRONTEND_URL",
-    "http://localhost:5173"
-)
+frontend_urls = [
+    url.strip()
+    for url in os.getenv(
+        "FRONTEND_URL",
+        "http://localhost:5173"
+    ).split(",")
+    if url.strip()
+]
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        frontend_url
-    ],
+    allow_origins=frontend_urls,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

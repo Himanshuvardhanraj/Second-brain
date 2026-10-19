@@ -390,6 +390,49 @@ body {
 .google-button:disabled, .guest-button:disabled { opacity: .6; cursor: wait; }
 .form-error { color: var(--error); font-size: 12px; margin: 15px 0 0; }
 
+.auth-tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.auth-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0 0 9px;
+  font: inherit;
+}
+
+.auth-tab--active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-form input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+}
+
+.auth-form input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .sources-toggle {
   display: flex;
   align-items: center;

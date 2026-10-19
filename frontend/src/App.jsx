@@ -17,6 +17,10 @@ async function api(path, options = {}, token = localStorage.getItem(TOKEN_KEY)) 
 }
 
 function Login({ onAuthenticated }) {
+  const [mode, setMode] = useState("login");
+  const [userId, setUserId] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -38,11 +42,18 @@ function Login({ onAuthenticated }) {
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
 
-  const signInWithGoogle = async () => {
+  const submitCredentials = async (event) => {
+    event.preventDefault();
     setBusy(true); setError("");
     try {
-      const data = await api("/api/auth/google", {}, null);
-      window.location.assign(data.url);
+      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/signup";
+      const data = await api(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, password, name: mode === "signup" ? name : undefined }),
+      }, null);
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+      onAuthenticated(data.access_token);
     } catch (err) { setError(err.message); setBusy(false); }
   };
 
@@ -52,8 +63,17 @@ function Login({ onAuthenticated }) {
         <div className="brand brand--dark"><span className="brand-mark">⌘</span><span className="brand-name">Second Brain</span></div>
         <p className="eyebrow">PERSONAL KNOWLEDGE, ORGANIZED</p>
         <h1>Your notes, in conversation.</h1>
-        <p className="login-copy">Sign in to keep your saved chats across devices, or explore the RAG assistant as a guest.</p>
-        <button className="google-button" onClick={signInWithGoogle} disabled={busy}>Continue with Google</button>
+        <p className="login-copy">Create a free account to keep your saved chats across devices. Passwords are stored as secure hashes in Supabase, never as plain text.</p>
+        <div className="auth-tabs">
+          <button className={mode === "login" ? "auth-tab auth-tab--active" : "auth-tab"} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
+          <button className={mode === "signup" ? "auth-tab auth-tab--active" : "auth-tab"} onClick={() => { setMode("signup"); setError(""); }}>Sign up</button>
+        </div>
+        <form onSubmit={submitCredentials} className="auth-form">
+          {mode === "signup" && <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Display name" maxLength={100} />}
+          <input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="User ID" minLength={3} maxLength={80} required />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password (8+ characters)" minLength={8} maxLength={128} required />
+          <button className="google-button" type="submit" disabled={busy}>{mode === "login" ? "Log in" : "Create account"}</button>
+        </form>
         <button className="guest-button" onClick={continueAsGuest} disabled={busy}>Skip for now</button>
         {error && <p className="form-error">{error}</p>}
       </section>
