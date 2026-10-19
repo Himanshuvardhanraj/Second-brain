@@ -21,6 +21,22 @@ rag = RAGPipeline()
 logger = logging.getLogger(__name__)
 
 
+def ensure_documents_bucket():
+    try:
+        buckets = supabase.storage.list_buckets()
+        if any(getattr(bucket, "name", None) == "documents" for bucket in buckets):
+            return
+        if any(isinstance(bucket, dict) and bucket.get("name") == "documents" for bucket in buckets):
+            return
+        supabase.storage.create_bucket(
+            "documents",
+            options={"public": False, "file_size_limit": 52428800},
+        )
+    except Exception:
+        logger.exception("Could not verify the documents storage bucket")
+        raise
+
+
 def chunk_text(
     text: str,
     chunk_size: int = 1000,
@@ -117,11 +133,16 @@ async def upload_document(
 
     # 1. Upload original PDF
     try:
+        ensure_documents_bucket()
         bucket = supabase.storage.from_("documents")
         bucket.upload(
             storage_path,
             file_bytes,
-            {"content-type": "application/pdf", "upsert": "true"},
+            {
+                "content-type": "application/pdf",
+                "cache-control": "3600",
+                "upsert": "true",
+            },
         )
     except Exception as exc:
         logger.exception("PDF storage failed for document %s", document_id)
