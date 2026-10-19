@@ -39,8 +39,10 @@ Rules:
   after the first matching passage.
 - Do not say that information is missing when it is present in
   another supplied source.
-- Give a concise but useful answer with headings and numbered
+- Give a complete, concise but useful answer with headings and numbered
   points when that improves exam revision.
+- Never stop in the middle of a sentence. Always finish the
+  answer before returning it.
 - Use Markdown when appropriate.
 
 USER QUESTION:
@@ -60,12 +62,19 @@ ANSWER:
                     model=self.model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        max_output_tokens=1000,
+                        max_output_tokens=1800,
+                        temperature=0.2,
                     )
                 )
 
-                return response.text or (
+                answer = response.text or (
                     "I couldn't generate an answer from the retrieved context."
+                )
+                if len(answer.strip()) >= 120 or answer.rstrip().endswith((".", "!", "?", ":", ")")):
+                    return answer
+                prompt += (
+                    "\nThe previous draft was incomplete. Rewrite it as a complete "
+                    "answer and do not stop mid-sentence:\n" + answer
                 )
 
             except Exception as e:
@@ -75,4 +84,6 @@ ANSWER:
                     wait_time = 2 ** attempt
                     time.sleep(wait_time)
 
-        raise last_error
+        if last_error:
+            raise last_error
+        return answer
