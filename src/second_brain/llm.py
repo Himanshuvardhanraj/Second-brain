@@ -1,11 +1,17 @@
 import os
 import time
+import logging
 
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+class GeminiQuotaError(Exception):
+    """Raised when Gemini rejects a request because the project quota is exhausted."""
 
 
 class GeminiLLM:
@@ -56,7 +62,7 @@ ANSWER:
 
         last_error = None
 
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 response = self.client.models.generate_content(
                     model=self.model,
@@ -72,12 +78,13 @@ ANSWER:
                 )
                 if len(answer.strip()) >= 120 and answer.rstrip().endswith((".", "!", "?", ")")):
                     return answer
-                prompt += (
-                    "\nThe previous draft was incomplete. Rewrite it as a complete "
-                    "answer and do not stop mid-sentence:\n" + answer
-                )
+                return answer
 
             except Exception as e:
+                error_text = str(e)
+                if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+                    logger.warning("Gemini quota exhausted for model %s", self.model)
+                    raise GeminiQuotaError from e
                 last_error = e
 
                 if attempt < 2:

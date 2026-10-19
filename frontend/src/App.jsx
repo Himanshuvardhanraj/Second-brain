@@ -172,7 +172,7 @@ function App() {
     try {
       const data = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, top_k: 8 }) }, token);
       setMessages((current) => [...current, { role: "assistant", text: data.answer, sources: data.sources || [], saved: false }]);
-    } catch (err) { setMessages((current) => [...current, { role: "assistant", text: err.message, sources: [], error: true }]); }
+    } catch (err) { setMessages((current) => [...current, { role: "assistant", text: err.message, sources: [], error: true }]); setNotice(err.message); }
     finally { setLoading(false); inputRef.current?.focus(); }
   };
 

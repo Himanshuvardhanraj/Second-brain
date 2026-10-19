@@ -10,6 +10,7 @@ from second_brain.routes.auth import router as auth_router
 from second_brain.routes.notes import router as notes_router
 from second_brain.routes.feedback import router as feedback_router
 from second_brain.auth import current_user
+from second_brain.llm import GeminiQuotaError
 
 
 app = FastAPI(
@@ -64,11 +65,21 @@ def chat(request: QueryRequest, user=Depends(current_user)):
             top_k=request.top_k
         )
 
+    except GeminiQuotaError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "AI_QUOTA_EXHAUSTED",
+                "message": "AI answer generation is temporarily unavailable because the Gemini quota is exhausted. Please try again after the quota resets.",
+            },
+        ) from exc
     except Exception as e:
-
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail={
+                "code": "CHAT_UNAVAILABLE",
+                "message": "The answer could not be generated. Please try again later.",
+            },
         )
 
 
