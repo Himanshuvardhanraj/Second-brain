@@ -70,7 +70,7 @@ ANSWER:
                 answer = response.text or (
                     "I couldn't generate an answer from the retrieved context."
                 )
-                if len(answer.strip()) >= 120 or answer.rstrip().endswith((".", "!", "?", ":", ")")):
+                if len(answer.strip()) >= 120 and answer.rstrip().endswith((".", "!", "?", ")")):
                     return answer
                 prompt += (
                     "\nThe previous draft was incomplete. Rewrite it as a complete "
