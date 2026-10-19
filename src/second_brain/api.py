@@ -42,7 +42,7 @@ rag = RAGPipeline()
 
 class QueryRequest(BaseModel):
     question: str
-    top_k: int = Field(default=5, ge=1, le=50)
+    top_k: int = Field(default=8, ge=1, le=50)
 
 
 @app.get("/health")
@@ -60,6 +60,7 @@ def chat(request: QueryRequest, user=Depends(current_user)):
 
         return rag.query(
             request.question,
+            user["sub"],
             top_k=request.top_k
         )
 

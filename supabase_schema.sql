@@ -18,6 +18,9 @@ create table if not exists public.users (
 alter table public.users add column if not exists username text unique;
 alter table public.users add column if not exists password_hash text;
 
+alter table public.documents add column if not exists user_id text;
+alter table public.document_chunks add column if not exists user_id text;
+
 create table if not exists public.notes (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
@@ -50,3 +53,34 @@ create table if not exists public.answer_feedback (
   sources jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now()
 );
+
+create or replace function public.match_document_chunks_for_user(
+  query_embedding vector(768),
+  match_threshold float,
+  match_count int,
+  requesting_user_id text
+)
+returns table (
+  document_id uuid,
+  content text,
+  page_number integer,
+  metadata jsonb,
+  similarity float,
+  filename text
+)
+language sql stable
+as $$
+  select
+    dc.document_id,
+    dc.content,
+    dc.page_number,
+    dc.metadata,
+    1 - (dc.embedding <=> query_embedding) as similarity,
+    d.filename
+  from public.document_chunks dc
+  join public.documents d on d.id = dc.document_id
+  where dc.user_id = requesting_user_id
+    and 1 - (dc.embedding <=> query_embedding) >= match_threshold
+  order by dc.embedding <=> query_embedding
+  limit match_count;
+$$;

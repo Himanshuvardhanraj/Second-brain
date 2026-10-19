@@ -343,6 +343,13 @@ Notes using the wishlist button.
 The same SQL file also creates `answer_feedback`. Run the complete file again
 after pulling updates so the five-star answer rating control can save feedback.
 
+For correct per-user retrieval, run the complete SQL file after this update.
+It adds user ownership to documents/chunks and creates
+`match_document_chunks_for_user`. Until that migration is applied, the backend
+keeps a legacy fallback so existing installations continue to work, but old
+unowned chunks may still appear in retrieval results. Re-upload documents after
+the migration to associate them with the account that uploaded them.
+
 For Vercel, deploy the `frontend` directory as the frontend project and set
 `VITE_API_URL` to the deployed backend URL, for example
 `https://second-brain-virid-eta.vercel.app`. Set `FRONTEND_URL` on the backend

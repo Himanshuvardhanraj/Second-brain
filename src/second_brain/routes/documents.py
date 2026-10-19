@@ -19,8 +19,8 @@ router = APIRouter(
 )
 
 
-rag = RAGPipeline()
 logger = logging.getLogger(__name__)
+rag = RAGPipeline()
 
 
 def ensure_documents_bucket():
@@ -41,33 +41,26 @@ def ensure_documents_bucket():
 
 def chunk_text(
     text: str,
-    chunk_size: int = 1000,
-    overlap: int = 150
+    chunk_size: int = 1400,
+    overlap: int = 220
 ) -> List[str]:
-
-    text = text.strip()
-
+    text = re.sub(r"[ \t]+", " ", text).strip()
     if not text:
         return []
 
+    paragraphs = [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
     chunks = []
-
-    start = 0
-
-    while start < len(text):
-
-        end = start + chunk_size
-
-        chunk = text[start:end].strip()
-
-        if chunk:
-            chunks.append(chunk)
-
-        if end >= len(text):
-            break
-
-        start = end - overlap
-
+    current = ""
+    for paragraph in paragraphs:
+        if len(current) + len(paragraph) + 1 <= chunk_size:
+            current = f"{current}\n{paragraph}".strip()
+            continue
+        if current:
+            chunks.append(current)
+        tail = current[-overlap:] if current else ""
+        current = f"{tail}\n{paragraph}".strip()
+    if current:
+        chunks.append(current)
     return chunks
 
 
@@ -170,6 +163,7 @@ async def upload_document(
             "file_path": storage_path,
             "file_type": file.content_type,
             "file_size": len(file_bytes),
+            "user_id": user["sub"],
         }).execute()
     except Exception as exc:
         logger.exception("PDF metadata insert failed for document %s", document_id)
@@ -195,7 +189,7 @@ async def upload_document(
 
     # 4. Embed + store chunks
     try:
-        rag.add_chunks(document_id, chunks)
+        rag.add_chunks(document_id, user["sub"], chunks)
     except Exception as exc:
         logger.exception("PDF indexing failed for document %s", document_id)
         raise HTTPException(

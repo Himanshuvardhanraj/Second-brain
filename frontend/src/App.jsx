@@ -8,7 +8,12 @@ const TOKEN_KEY = "second_brain_token";
 async function api(path, options = {}, token = localStorage.getItem(TOKEN_KEY)) {
   const headers = new Headers(options.headers || {});
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch {
+    throw new Error("The backend is temporarily unavailable. Please try again.");
+  }
   const text = await response.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text }; }
@@ -165,7 +170,7 @@ function App() {
     const text = question.trim(); if (!text || loading) return;
     setMessages((current) => [...current, { role: "user", text }]); setQuestion(""); setLoading(true); setNotice("");
     try {
-      const data = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, top_k: 5 }) }, token);
+      const data = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, top_k: 8 }) }, token);
       setMessages((current) => [...current, { role: "assistant", text: data.answer, sources: data.sources || [], saved: false }]);
     } catch (err) { setMessages((current) => [...current, { role: "assistant", text: err.message, sources: [], error: true }]); }
     finally { setLoading(false); inputRef.current?.focus(); }
