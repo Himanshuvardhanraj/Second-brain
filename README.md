@@ -340,6 +340,9 @@ signed guest session. Both registered and guest sessions receive a JWT, and
 chat requests are rejected without one. Assistant responses can be saved to
 Notes using the wishlist button.
 
+The same SQL file also creates `answer_feedback`. Run the complete file again
+after pulling updates so the five-star answer rating control can save feedback.
+
 For Vercel, deploy the `frontend` directory as the frontend project and set
 `VITE_API_URL` to the deployed backend URL, for example
 `https://second-brain-virid-eta.vercel.app`. Set `FRONTEND_URL` on the backend

@@ -68,7 +68,19 @@ class RAGPipeline:
             }
         ).execute()
 
-        return response.data or []
+        unique_results = []
+        seen = set()
+        for result in response.data or []:
+            key = (
+                result.get("document_id"),
+                result.get("page_number"),
+                result.get("content", "").strip(),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_results.append(result)
+        return unique_results
 
     def query(
         self,
