@@ -1,3 +1,9 @@
+create extension if not exists pgcrypto;
+
+insert into storage.buckets (id, name, public)
+values ('documents', 'documents', false)
+on conflict (id) do update set public = false;
+
 create table if not exists public.users (
   id text primary key,
   email text unique,

@@ -12,7 +12,10 @@ async function api(path, options = {}, token = localStorage.getItem(TOKEN_KEY)) 
   const text = await response.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text }; }
-  if (!response.ok) throw new Error(data.detail || "Something went wrong. Please try again.");
+  if (!response.ok) {
+    const detail = typeof data.detail === "object" ? data.detail.message : data.detail;
+    throw new Error(detail || "Something went wrong. Please try again.");
+  }
   return data;
 }
 

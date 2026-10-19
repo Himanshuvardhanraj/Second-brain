@@ -1,4 +1,5 @@
 import io
+import logging
 import uuid
 from typing import List, Dict
 
@@ -17,6 +18,7 @@ router = APIRouter(
 
 
 rag = RAGPipeline()
+logger = logging.getLogger(__name__)
 
 
 def chunk_text(
@@ -116,25 +118,19 @@ async def upload_document(
     # 1. Upload original PDF
     try:
         bucket = supabase.storage.from_("documents")
-        try:
-            bucket.upload(
-                storage_path,
-                file_bytes,
-                {"content-type": "application/pdf", "upsert": "true"},
-            )
-        except Exception as upload_error:
-            if "not found" not in str(upload_error).lower() and "bucket" not in str(upload_error).lower():
-                raise
-            supabase.storage.create_bucket("documents", options={"public": False})
-            bucket.upload(
-                storage_path,
-                file_bytes,
-                {"content-type": "application/pdf", "upsert": "true"},
-            )
+        bucket.upload(
+            storage_path,
+            file_bytes,
+            {"content-type": "application/pdf", "upsert": "true"},
+        )
     except Exception as exc:
+        logger.exception("PDF storage failed for document %s", document_id)
         raise HTTPException(
-            status_code=502,
-            detail="Could not store the PDF. Create a private Supabase Storage bucket named 'documents'.",
+            status_code=503,
+            detail={
+                "code": "PDF_STORAGE_UNAVAILABLE",
+                "message": "PDF storage is temporarily unavailable. Please try again later.",
+            },
         ) from exc
 
     # 2. Insert document metadata
@@ -147,7 +143,14 @@ async def upload_document(
             "file_size": len(file_bytes),
         }).execute()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Could not save PDF metadata") from exc
+        logger.exception("PDF metadata insert failed for document %s", document_id)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "PDF_METADATA_UNAVAILABLE",
+                "message": "The PDF could not be registered. Please try again later.",
+            },
+        ) from exc
 
     # 3. Extract + chunk
     try:
@@ -165,7 +168,14 @@ async def upload_document(
     try:
         rag.add_chunks(document_id, chunks)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Could not index the PDF for retrieval") from exc
+        logger.exception("PDF indexing failed for document %s", document_id)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "PDF_INDEXING_UNAVAILABLE",
+                "message": "The PDF was uploaded, but indexing is temporarily unavailable.",
+            },
+        ) from exc
 
     return {
         "message": "PDF uploaded and indexed successfully",
