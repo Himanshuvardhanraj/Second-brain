@@ -23,3 +23,13 @@ create table if not exists public.notes (
 
 create index if not exists notes_user_created_idx
   on public.notes (user_id, created_at desc);
+
+create table if not exists public.answer_feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  question text not null,
+  answer text not null,
+  rating integer not null check (rating between 1 and 5),
+  sources jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now()
+);

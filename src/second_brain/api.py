@@ -2,12 +2,13 @@ import os
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from second_brain.rag import RAGPipeline
 from second_brain.routes.documents import router as documents_router
 from second_brain.routes.auth import router as auth_router
 from second_brain.routes.notes import router as notes_router
+from second_brain.routes.feedback import router as feedback_router
 from second_brain.auth import current_user
 
 
@@ -41,7 +42,7 @@ rag = RAGPipeline()
 
 class QueryRequest(BaseModel):
     question: str
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1, le=50)
 
 
 @app.get("/health")
@@ -75,3 +76,4 @@ app.include_router(
 )
 app.include_router(auth_router)
 app.include_router(notes_router)
+app.include_router(feedback_router)

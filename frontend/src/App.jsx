@@ -125,6 +125,20 @@ function App() {
     } catch (err) { setNotice(err.message); }
   };
 
+  const rateAnswer = async (messageIndex, rating) => {
+    const answer = messages[messageIndex];
+    const previous = messages[messageIndex - 1];
+    try {
+      await api("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: previous?.text || "Saved conversation", answer: answer.text, rating, sources: answer.sources || [] }),
+      }, token);
+      setMessages((current) => current.map((message, index) => index === messageIndex ? { ...message, rating } : message));
+      setNotice("Thanks - your rating was saved.");
+    } catch (err) { setNotice(err.message); }
+  };
+
   const uploadPDF = async (file) => {
     if (!file) return;
     if (file.type !== "application/pdf") { setNotice("Please select a PDF file."); return; }
@@ -161,7 +175,7 @@ function App() {
       <div className="scroll" ref={scrollRef}>
         {showNotes ? <div className="notes-page"><p className="eyebrow">YOUR SAVED KNOWLEDGE</p><h1>Notes</h1>{notes.length === 0 ? <p className="empty-sub">Saved chats will appear here when you wishlist an answer.</p> : notes.map((note) => <article className="note-item" key={note.id}><div className="note-question">{note.question}</div><div className="note-answer"><ReactMarkdown>{note.answer}</ReactMarkdown></div><div className="note-date">{new Date(note.created_at).toLocaleString()}</div></article>)}</div> : <>
         {messages.length === 0 && <div className="empty"><p className="empty-title">Ask your notes something.</p><p className="empty-sub">Answers are grounded in what you've actually written — with sources, every time.</p></div>}
-        {messages.map((message, index) => <div key={index} className={`row row--${message.role}`}>{message.role === "user" ? <div className="bubble--user">{message.text}</div> : <div className={`card ${message.error ? "card--error" : ""}`}><div className="card-body"><ReactMarkdown>{message.text}</ReactMarkdown></div><div className="card-actions"><SourceList sources={message.sources} />{!message.error && <button className={`wishlist ${message.saved ? "wishlist--saved" : ""}`} onClick={() => saveChat(index)}>{message.saved ? "♥ Saved in Notes" : "♡ Save to Notes"}</button>}</div></div>}</div>)}
+        {messages.map((message, index) => <div key={index} className={`row row--${message.role}`}>{message.role === "user" ? <div className="bubble--user">{message.text}</div> : <div className={`card ${message.error ? "card--error" : ""}`}><div className="card-body"><ReactMarkdown>{message.text}</ReactMarkdown></div><div className="card-actions"><SourceList sources={message.sources} />{!message.error && <><div className="rating" aria-label="Rate answer">{[1, 2, 3, 4, 5].map((value) => <button key={value} className={value <= (message.rating || 0) ? "rating--selected" : ""} onClick={() => rateAnswer(index, value)} aria-label={`${value} out of 5`}>★</button>)}</div><button className={`wishlist ${message.saved ? "wishlist--saved" : ""}`} onClick={() => saveChat(index)}>{message.saved ? "♥ Saved in Notes" : "♡ Save to Notes"}</button></>}</div></div>}</div>)}
         {loading && <div className="row row--assistant"><div className="card card--pending"><div className="thinking"><span /><span /><span /></div></div></div>}
         </>}
       </div>

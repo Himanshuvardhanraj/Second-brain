@@ -2,11 +2,12 @@ import io
 import uuid
 from typing import List, Dict
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pypdf import PdfReader
 
 from second_brain.supabase_client import supabase
 from second_brain.rag import RAGPipeline
+from second_brain.auth import current_user
 
 
 router = APIRouter(
@@ -83,7 +84,8 @@ def extract_pdf_chunks(
 
 @router.post("/upload")
 async def upload_document(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    user=Depends(current_user),
 ):
 
     if not file.filename:
@@ -108,34 +110,50 @@ async def upload_document(
 
     document_id = str(uuid.uuid4())
 
-    storage_path = (
-        f"{document_id}/{file.filename}"
-    )
+    safe_filename = file.filename.replace("/", "_").replace("\\", "_")
+    storage_path = f"{user['sub']}/{document_id}/{safe_filename}"
 
     # 1. Upload original PDF
-    supabase.storage \
-        .from_("documents") \
-        .upload(
-            storage_path,
-            file_bytes,
-            {
-                "content-type": "application/pdf"
-            }
-        )
+    try:
+        bucket = supabase.storage.from_("documents")
+        try:
+            bucket.upload(
+                storage_path,
+                file_bytes,
+                {"content-type": "application/pdf", "upsert": "true"},
+            )
+        except Exception as upload_error:
+            if "not found" not in str(upload_error).lower() and "bucket" not in str(upload_error).lower():
+                raise
+            supabase.storage.create_bucket("documents", options={"public": False})
+            bucket.upload(
+                storage_path,
+                file_bytes,
+                {"content-type": "application/pdf", "upsert": "true"},
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not store the PDF. Create a private Supabase Storage bucket named 'documents'.",
+        ) from exc
 
     # 2. Insert document metadata
-    supabase.table("documents").insert({
-        "id": document_id,
-        "filename": file.filename,
-        "file_path": storage_path,
-        "file_type": file.content_type,
-        "file_size": len(file_bytes)
-    }).execute()
+    try:
+        supabase.table("documents").insert({
+            "id": document_id,
+            "filename": safe_filename,
+            "file_path": storage_path,
+            "file_type": file.content_type,
+            "file_size": len(file_bytes),
+        }).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not save PDF metadata") from exc
 
     # 3. Extract + chunk
-    chunks = extract_pdf_chunks(
-        file_bytes
-    )
+    try:
+        chunks = extract_pdf_chunks(file_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="The uploaded file is not a readable PDF") from exc
 
     if not chunks:
         raise HTTPException(
@@ -144,14 +162,14 @@ async def upload_document(
         )
 
     # 4. Embed + store chunks
-    rag.add_chunks(
-        document_id,
-        chunks
-    )
+    try:
+        rag.add_chunks(document_id, chunks)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not index the PDF for retrieval") from exc
 
     return {
         "message": "PDF uploaded and indexed successfully",
         "document_id": document_id,
-        "filename": file.filename,
+        "filename": safe_filename,
         "chunks_created": len(chunks)
     }

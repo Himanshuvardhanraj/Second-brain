@@ -315,6 +315,24 @@ body {
 .wishlist:hover,
 .wishlist--saved { color: var(--accent-ink); }
 
+.rating {
+  display: flex;
+  gap: 1px;
+  margin-left: auto;
+}
+
+.rating button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--line);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.rating button:hover,
+.rating--selected { color: var(--accent) !important; }
+
 .notice {
   margin: 0 48px 10px;
   padding: 8px 12px;
