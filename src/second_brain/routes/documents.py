@@ -1,5 +1,7 @@
 import io
 import logging
+import re
+import unicodedata
 import uuid
 from typing import List, Dict
 
@@ -128,7 +130,13 @@ async def upload_document(
 
     document_id = str(uuid.uuid4())
 
-    safe_filename = file.filename.replace("/", "_").replace("\\", "_")
+    original_filename = file.filename
+    safe_filename = unicodedata.normalize("NFKD", original_filename).encode(
+        "ascii", "ignore"
+    ).decode("ascii")
+    safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_filename).strip("._")
+    if not safe_filename:
+        safe_filename = f"document-{document_id}.pdf"
     storage_path = f"{user['sub']}/{document_id}/{safe_filename}"
 
     # 1. Upload original PDF
@@ -158,7 +166,7 @@ async def upload_document(
     try:
         supabase.table("documents").insert({
             "id": document_id,
-            "filename": safe_filename,
+            "filename": original_filename,
             "file_path": storage_path,
             "file_type": file.content_type,
             "file_size": len(file_bytes),
@@ -201,6 +209,6 @@ async def upload_document(
     return {
         "message": "PDF uploaded and indexed successfully",
         "document_id": document_id,
-        "filename": safe_filename,
+        "filename": original_filename,
         "chunks_created": len(chunks)
     }
