@@ -157,14 +157,22 @@ async def upload_document(
 
     # 2. Insert document metadata
     try:
-        supabase.table("documents").insert({
+        document_record = {
             "id": document_id,
             "filename": original_filename,
             "file_path": storage_path,
             "file_type": file.content_type,
             "file_size": len(file_bytes),
             "user_id": user["sub"],
-        }).execute()
+        }
+        try:
+            supabase.table("documents").insert(document_record).execute()
+        except Exception as insert_error:
+            if "user_id" not in str(insert_error).lower():
+                raise
+            logger.warning("Documents user_id column is not migrated; storing legacy metadata")
+            document_record.pop("user_id")
+            supabase.table("documents").insert(document_record).execute()
     except Exception as exc:
         logger.exception("PDF metadata insert failed for document %s", document_id)
         raise HTTPException(
