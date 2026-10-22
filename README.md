@@ -318,7 +318,8 @@ SUPABASE_SECRET_KEY=your_rotated_supabase_secret_key
 
 FRONTEND_URL=http://localhost:5173
 JWT_SECRET_KEY=replace_with_a_long_random_secret
-JWT_EXPIRY_HOURS=24
+APP_TOKEN_TTL_SECONDS=900
+MAX_IN_MEMORY_SESSIONS=5000
 
 Run the API:
 
@@ -333,12 +334,24 @@ http://localhost:8000/docs
 ### Authentication and notes setup
 
 Run `supabase_schema.sql` in the Supabase SQL editor before using account login
-or the Notes feature. Users can create accounts with a user ID and password. Only
-salted `scrypt` password hashes are stored in Supabase; the raw password is
-never stored. The frontend starts at a login screen; “Skip for now” creates a
-signed guest session. Both registered and guest sessions receive a JWT, and
-chat requests are rejected without one. Assistant responses can be saved to
-Notes using the wishlist button.
+or the Notes feature. Registered accounts are created and authenticated by
+Supabase Auth using email/password; the application never stores passwords.
+After Supabase validates the credentials, FastAPI issues a short-lived
+application JWT containing a session ID. The session ID is checked against a
+bounded in-memory TTL registry on every protected request, which supports
+logout/revocation without Redis. Supabase refresh tokens are used only by the backend refresh endpoint to issue
+a new application token and are delivered as an HttpOnly cookie. The frontend
+stores only the short-lived application token, never a refresh token or the
+Supabase service key.
+
+The in-memory registry is intentionally dependency-free, but it is local to
+one running process. It is suitable for a free single-instance deployment;
+multiple backend instances need a shared session store (for example Supabase
+or a managed cache) for global revocation. Enable Supabase email confirmation
+if required by your project; users must confirm before a session is returned.
+The frontend starts at a login screen; “Skip for now” creates a signed guest
+session. Guest sessions do not create a Supabase Auth user. Chat requests are
+rejected without a valid application token.
 
 The same SQL file also creates `answer_feedback`. Run the complete file again
 after pulling updates so the five-star answer rating control can save feedback.

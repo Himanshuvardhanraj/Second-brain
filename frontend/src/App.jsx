@@ -10,7 +10,7 @@ async function api(path, options = {}, token = localStorage.getItem(TOKEN_KEY)) 
   if (token) headers.set("Authorization", `Bearer ${token}`);
   let response;
   try {
-    response = await fetch(`${API_URL}${path}`, { ...options, headers });
+    response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
   } catch {
     throw new Error("The backend is temporarily unavailable. Please try again.");
   }
@@ -26,7 +26,7 @@ async function api(path, options = {}, token = localStorage.getItem(TOKEN_KEY)) 
 
 function Login({ onAuthenticated }) {
   const [mode, setMode] = useState("login");
-  const [userId, setUserId] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -58,7 +58,7 @@ function Login({ onAuthenticated }) {
       const data = await api(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, password, name: mode === "signup" ? name : undefined }),
+        body: JSON.stringify({ email, password, name: mode === "signup" ? name : undefined }),
       }, null);
       localStorage.setItem(TOKEN_KEY, data.access_token);
       onAuthenticated(data.access_token);
@@ -71,14 +71,14 @@ function Login({ onAuthenticated }) {
         <div className="brand brand--dark"><span className="brand-mark">⌘</span><span className="brand-name">Second Brain</span></div>
         <p className="eyebrow">PERSONAL KNOWLEDGE, ORGANIZED</p>
         <h1>Your notes, in conversation.</h1>
-        <p className="login-copy">Create a free account to keep your saved chats across devices. Passwords are stored as secure hashes in Supabase, never as plain text.</p>
+        <p className="login-copy">Create a free account to keep your saved chats across devices. Supabase Auth securely manages your credentials.</p>
         <div className="auth-tabs">
           <button className={mode === "login" ? "auth-tab auth-tab--active" : "auth-tab"} onClick={() => { setMode("login"); setError(""); }}>Log in</button>
           <button className={mode === "signup" ? "auth-tab auth-tab--active" : "auth-tab"} onClick={() => { setMode("signup"); setError(""); }}>Sign up</button>
         </div>
         <form onSubmit={submitCredentials} className="auth-form">
           {mode === "signup" && <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Display name" maxLength={100} />}
-          <input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="User ID" minLength={3} maxLength={80} required />
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email address" maxLength={254} required />
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password (8+ characters)" minLength={8} maxLength={128} required />
           <button className="google-button" type="submit" disabled={busy}>{mode === "login" ? "Log in" : "Create account"}</button>
         </form>
@@ -115,7 +115,18 @@ function App() {
     try {
       const [account, saved] = await Promise.all([api("/api/auth/me", {}, activeToken), api("/api/notes", {}, activeToken)]);
       setUser(account.user); setNotes(saved.notes || []);
-    } catch { localStorage.removeItem(TOKEN_KEY); setToken(null); }
+    } catch {
+      try {
+        const renewed = await api("/api/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }, null);
+        localStorage.setItem(TOKEN_KEY, renewed.access_token);
+        setToken(renewed.access_token);
+      } catch {
+        localStorage.removeItem(TOKEN_KEY); setToken(null);
+      }
+    }
   };
 
   useEffect(() => { if (token) loadAccount(token); }, [token]);
@@ -123,7 +134,10 @@ function App() {
 
   if (!token) return <Login onAuthenticated={setToken} />;
 
-  const signOut = () => { localStorage.removeItem(TOKEN_KEY); setToken(null); };
+  const signOut = () => {
+    api("/api/auth/logout", { method: "POST" }, token).catch(() => {});
+    localStorage.removeItem(TOKEN_KEY); setToken(null);
+  };
   const saveChat = async (messageIndex) => {
     const answer = messages[messageIndex];
     const previous = messages[messageIndex - 1];
