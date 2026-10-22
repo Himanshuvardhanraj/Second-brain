@@ -336,22 +336,23 @@ http://localhost:8000/docs
 Run `supabase_schema.sql` in the Supabase SQL editor before using account login
 or the Notes feature. Registered accounts are created and authenticated by
 Supabase Auth using email/password; the application never stores passwords.
-After Supabase validates the credentials, FastAPI issues a short-lived
-application JWT containing a session ID. The session ID is checked against a
-bounded in-memory TTL registry on every protected request, which supports
-logout/revocation without Redis. Supabase refresh tokens are used only by the backend refresh endpoint to issue
-a new application token and are delivered as an HttpOnly cookie. The frontend
-stores only the short-lived application token, never a refresh token or the
-Supabase service key.
+After Supabase validates the credentials, the frontend uses the signed
+Supabase access JWT for API requests. FastAPI validates that token through
+Supabase Auth, so authorization works across Vercel serverless instances.
+Supabase refresh tokens are used only by the backend refresh endpoint to issue
+a new access token and are delivered as an HttpOnly cookie. The frontend
+stores only the access token, never a refresh token or the Supabase service
+key. Guest sessions use a separate application JWT and bounded in-memory TTL
+registry.
 
-The in-memory registry is intentionally dependency-free, but it is local to
-one running process. It is suitable for a free single-instance deployment;
-multiple backend instances need a shared session store (for example Supabase
-or a managed cache) for global revocation. Enable Supabase email confirmation
+The guest registry is intentionally dependency-free and local to one running
+process; guest sessions can be lost when a serverless instance is recycled.
+Registered-user sessions are managed by Supabase Auth and remain valid across
+instances. Enable Supabase email confirmation
 if required by your project; users must confirm before a session is returned.
 The frontend starts at a login screen; “Skip for now” creates a signed guest
 session. Guest sessions do not create a Supabase Auth user. Chat requests are
-rejected without a valid application token.
+rejected without a valid access token.
 
 The same SQL file also creates `answer_feedback`. Run the complete file again
 after pulling updates so the five-star answer rating control can save feedback.

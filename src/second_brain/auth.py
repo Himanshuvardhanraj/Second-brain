@@ -97,7 +97,8 @@ def _auth_response(user: dict[str, Any], session: Any) -> dict[str, Any]:
             detail="Supabase did not create a session. Disable email confirmation or confirm the account first.",
         )
     return {
-        "access_token": _create_app_token(user),
+        # Supabase's signed access JWT is valid across all serverless instances.
+        "access_token": access_token,
         "refresh_token": refresh_token,
         "user": {
             "id": user["sub"],
@@ -167,6 +168,33 @@ def refresh(refresh_token: str) -> dict[str, Any]:
 
 
 def decode_token(token: str) -> Dict[str, Any]:
+    try:
+        claims = jwt.decode(token, options={"verify_signature": False})
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+
+    # Guest tokens are application-issued and remain process-local.
+    if claims.get("is_guest") is True:
+        try:
+            return _decode_app_token(token)
+        except HTTPException:
+            raise
+
+    # Registered-user tokens are Supabase JWTs and can be validated from any
+    # Vercel serverless instance through Supabase Auth.
+    try:
+        result = supabase.auth.get_user(token)
+        user = getattr(result, "user", None)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        return _session_user(user)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+
+
+def _decode_app_token(token: str) -> Dict[str, Any]:
     try:
         claims = jwt.decode(token, _require_secret(), algorithms=[JWT_ALGORITHM])
         user = _get_session(claims["sid"])
