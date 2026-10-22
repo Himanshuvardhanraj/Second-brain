@@ -214,3 +214,38 @@ async def upload_document(
         "filename": original_filename,
         "chunks_created": len(chunks)
     }
+
+
+@router.get("")
+def list_documents(user=Depends(current_user)):
+    try:
+        response = (
+            supabase.table("documents").select("id,filename,file_path,file_type,file_size,created_at")
+            .eq("user_id", user["sub"]).order("created_at", desc=True).execute()
+        )
+        return {"documents": response.data or []}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not load your uploaded documents") from exc
+
+
+@router.delete("/{document_id}")
+def delete_document(document_id: str, user=Depends(current_user)):
+    try:
+        document_response = (
+            supabase.table("documents").select("id,file_path")
+            .eq("id", document_id).eq("user_id", user["sub"]).limit(1).execute()
+        )
+        document = document_response.data[0] if document_response.data else None
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        supabase.table("document_chunks").delete().eq("document_id", document_id).execute()
+        supabase.table("documents").delete().eq("id", document_id).eq("user_id", user["sub"]).execute()
+        if document.get("file_path"):
+            supabase.storage.from_("documents").remove([document["file_path"]])
+        return {"message": "Document deleted", "document_id": document_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Could not delete document %s", document_id)
+        raise HTTPException(status_code=502, detail="Could not delete this document") from exc

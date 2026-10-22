@@ -103,7 +103,9 @@ function App() {
   const [user, setUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [showNotes, setShowNotes] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -113,8 +115,8 @@ function App() {
 
   const loadAccount = async (activeToken) => {
     try {
-      const [account, saved] = await Promise.all([api("/api/auth/me", {}, activeToken), api("/api/notes", {}, activeToken)]);
-      setUser(account.user); setNotes(saved.notes || []);
+      const [account, saved, library] = await Promise.all([api("/api/auth/me", {}, activeToken), api("/api/notes", {}, activeToken), api("/api/documents", {}, activeToken)]);
+      setUser(account.user); setNotes(saved.notes || []); setDocuments(library.documents || []);
     } catch {
       try {
         const renewed = await api("/api/auth/refresh", {
@@ -155,6 +157,14 @@ function App() {
     } catch (err) { setNotice(err.message); }
   };
 
+  const deleteDocument = async (documentId) => {
+    try {
+      await api(`/api/documents/${documentId}`, { method: "DELETE" }, token);
+      setDocuments((current) => current.filter((document) => document.id !== documentId));
+      setNotice("Document deleted.");
+    } catch (err) { setNotice(err.message); }
+  };
+
   const rateAnswer = async (messageIndex, rating) => {
     const answer = messages[messageIndex];
     const previous = messages[messageIndex - 1];
@@ -176,6 +186,7 @@ function App() {
     try {
       const form = new FormData(); form.append("file", file);
       const data = await api("/api/documents/upload", { method: "POST", body: form }, token);
+      setDocuments((current) => [{ id: data.document_id, filename: data.filename, file_size: file.size, created_at: new Date().toISOString() }, ...current]);
       setNotice(`${data.filename} indexed — ${data.chunks_created} chunks ready.`);
     } catch (err) { setNotice(err.message); } finally { setUploading(false); }
   };
@@ -194,16 +205,17 @@ function App() {
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">⌘</span><span className="brand-name">Second Brain</span></div>
       <nav className="nav">
-        <div className={`nav-item ${!showNotes ? "nav-item--active" : ""}`} onClick={() => setShowNotes(false)}>Chat</div>
-        <label className="nav-item upload-item">{uploading ? "Indexing…" : "Upload PDF"}<input type="file" accept="application/pdf" hidden disabled={uploading} onChange={(event) => { uploadPDF(event.target.files?.[0]); event.target.value = ""; }} /></label>
-        <div className={`nav-item notes-link ${showNotes ? "nav-item--active" : ""}`} onClick={() => setShowNotes(true)}>Notes <span>{notes.length}</span></div>
+        <div className={`nav-item ${!showNotes && !showLibrary ? "nav-item--active" : ""}`} onClick={() => { setShowNotes(false); setShowLibrary(false); }}>Chat</div>
+        <label className="upload-card"><span className="upload-icon">↑</span><span><strong>{uploading ? "Indexing PDF…" : "Upload a PDF"}</strong><small>Private to your account</small></span><input type="file" accept="application/pdf" hidden disabled={uploading} onChange={(event) => { uploadPDF(event.target.files?.[0]); event.target.value = ""; }} /></label>
+        <div className={`nav-item notes-link ${showLibrary ? "nav-item--active" : ""}`} onClick={() => { setShowLibrary(true); setShowNotes(false); }}>Library <span>{documents.length}</span></div>
+        <div className={`nav-item notes-link ${showNotes ? "nav-item--active" : ""}`} onClick={() => { setShowNotes(true); setShowLibrary(false); }}>Notes <span>{notes.length}</span></div>
       </nav>
       <div className="account"><div className="avatar">{(user?.name || "G").charAt(0).toUpperCase()}</div><div><strong>{user?.name || "Guest"}</strong><small>{user?.is_guest ? "Guest session" : user?.email}</small></div><button onClick={signOut} title="Sign out">↗</button></div>
     </aside>
     <main className="stage">
       <header className="topbar"><span className="welcome">Hey, {user?.name || "there"}</span><span className="topbar-note">Your private knowledge space</span></header>
       <div className="scroll" ref={scrollRef}>
-        {showNotes ? <div className="notes-page"><p className="eyebrow">YOUR SAVED KNOWLEDGE</p><h1>Notes</h1>{notes.length === 0 ? <p className="empty-sub">Saved chats will appear here when you wishlist an answer.</p> : notes.map((note) => <article className="note-item" key={note.id}><div className="note-question">{note.question}</div><div className="note-answer"><ReactMarkdown>{note.answer}</ReactMarkdown></div><div className="note-date">{new Date(note.created_at).toLocaleString()}</div></article>)}</div> : <>
+        {showLibrary ? <div className="notes-page"><p className="eyebrow">YOUR PRIVATE DOCUMENTS</p><h1>Document library</h1><p className="empty-sub">Only PDFs uploaded from this account appear here.</p>{documents.length === 0 ? <div className="library-empty"><span>＋</span><strong>No PDFs yet</strong><small>Use “Upload a PDF” to add your first document.</small></div> : <div className="document-list">{documents.map((document) => <article className="document-item" key={document.id}><div className="document-icon">PDF</div><div className="document-info"><strong>{document.filename}</strong><small>{document.file_size ? `${(document.file_size / 1024 / 1024).toFixed(2)} MB` : "PDF"} · {document.created_at ? new Date(document.created_at).toLocaleDateString() : "Recently added"}</small></div><button className="document-delete" onClick={() => deleteDocument(document.id)} aria-label={`Delete ${document.filename}`}>Delete</button></article>)}</div>}</div> : showNotes ? <div className="notes-page"><p className="eyebrow">YOUR SAVED KNOWLEDGE</p><h1>Notes</h1>{notes.length === 0 ? <p className="empty-sub">Saved chats will appear here when you wishlist an answer.</p> : notes.map((note) => <article className="note-item" key={note.id}><div className="note-question">{note.question}</div><div className="note-answer"><ReactMarkdown>{note.answer}</ReactMarkdown></div><div className="note-date">{new Date(note.created_at).toLocaleString()}</div></article>)}</div> : <>
         {messages.length === 0 && <div className="empty"><p className="empty-title">Ask your notes something.</p><p className="empty-sub">Answers are grounded in what you've actually written — with sources, every time.</p></div>}
         {messages.map((message, index) => <div key={index} className={`row row--${message.role}`}>{message.role === "user" ? <div className="bubble--user">{message.text}</div> : <div className={`card ${message.error ? "card--error" : ""}`}><div className="card-body"><ReactMarkdown>{message.text}</ReactMarkdown></div><div className="card-actions"><SourceList sources={message.sources} />{!message.error && <><div className="rating" aria-label="Rate answer">{[1, 2, 3, 4, 5].map((value) => <button key={value} className={value <= (message.rating || 0) ? "rating--selected" : ""} onClick={() => rateAnswer(index, value)} aria-label={`${value} out of 5`}>★</button>)}</div><button className={`wishlist ${message.saved ? "wishlist--saved" : ""}`} onClick={() => saveChat(index)}>{message.saved ? "♥ Saved in Notes" : "♡ Save to Notes"}</button></>}</div></div>}</div>)}
         {loading && <div className="row row--assistant"><div className="card card--pending"><div className="thinking"><span /><span /><span /></div></div></div>}

@@ -87,6 +87,49 @@ body {
   cursor: pointer;
 }
 
+.upload-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 10px;
+  padding: 12px;
+  border: 1px solid rgba(232, 178, 92, 0.35);
+  border-radius: 10px;
+  background: rgba(232, 178, 92, 0.1);
+  color: #fff6e5;
+  cursor: pointer;
+}
+
+.upload-card:hover {
+  background: rgba(232, 178, 92, 0.18);
+}
+
+.upload-card span:not(.upload-icon) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.upload-card strong {
+  font-size: 13px;
+}
+
+.upload-card small {
+  color: #c8c7c2;
+  font-size: 10px;
+}
+
+.upload-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .notes-link {
   display: flex;
   justify-content: space-between;
@@ -352,6 +395,73 @@ body {
   font-size: 34px;
   font-weight: 400;
   margin: 8px 0 28px;
+}
+
+.library-empty {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin-top: 28px;
+  padding: 32px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.library-empty span {
+  color: var(--accent);
+  font-size: 28px;
+}
+
+.library-empty small,
+.document-info small {
+  color: var(--muted);
+}
+
+.document-list {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+  margin-top: 28px;
+}
+
+.document-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.document-icon {
+  padding: 7px 6px;
+  border-radius: 5px;
+  background: #f3dfd8;
+  color: #9b4435;
+  font: 700 10px "IBM Plex Mono", monospace;
+}
+
+.document-info {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+
+.document-info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-delete {
+  border: 0;
+  background: transparent;
+  color: #a14d42;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .note-item {
