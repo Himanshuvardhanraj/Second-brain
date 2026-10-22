@@ -375,6 +375,28 @@ Chat answers are streamed through `POST /api/chat/stream` as server-sent
 events. The existing `POST /api/chat` JSON endpoint remains available for
 clients that do not support streaming.
 
+### RBAC and search logging
+
+Registered-user roles are read only from Supabase Auth `app_metadata`; the
+client cannot select or change a role. Promote an account manually with:
+
+```bash
+SUPABASE_URL=... SUPABASE_SECRET_KEY=... MY_SUPABASE_USER_ID=... python promote_admin.py
+```
+
+Run `supabase_rbac_migration.sql` manually in Supabase SQL Editor before using
+the admin console. It creates RLS-protected `search_logs` and append-only
+`admin_audit_log` tables. Search queries are retained for
+`SEARCH_LOG_RETENTION_DAYS` (default 30); schedule the documented cleanup SQL
+with Supabase pg_cron or a scheduled function.
+
+The admin deletion path hard-deletes the Supabase Auth account, profile,
+documents, chunks/embeddings, Storage files, Notes, feedback, and search logs.
+It requires typing the target email, blocks self-deletion and last-admin
+deletion, and requires an explicit confirmation when deleting another admin.
+Database and Storage operations cannot share one Postgres transaction, so the
+backend performs them in an idempotent ordered sequence and audits failures.
+
 For Vercel, deploy the `frontend` directory as the frontend project and set
 `VITE_API_URL` to the deployed backend URL, for example
 `https://second-brain-virid-eta.vercel.app`. Set `FRONTEND_URL` on the backend

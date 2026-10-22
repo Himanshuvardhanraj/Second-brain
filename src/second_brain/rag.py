@@ -78,15 +78,8 @@ class RAGPipeline:
                 }
             ).execute()
         except Exception as exc:
-            self.logger.warning("User-scoped retrieval is not migrated: %s", exc)
-            response = supabase.rpc(
-                "match_document_chunks",
-                {
-                    "query_embedding": query_embedding,
-                    "match_threshold": 0.30,
-                    "match_count": top_k,
-                }
-            ).execute()
+            self.logger.exception("User-scoped retrieval failed")
+            raise RuntimeError("User-scoped retrieval is unavailable") from exc
 
         unique_results = []
         seen = set()

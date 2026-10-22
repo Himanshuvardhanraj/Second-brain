@@ -126,6 +126,41 @@ function SourceList({ sources }) {
   </div>;
 }
 
+function AdminPanel({ token, onNotice }) {
+  const [tab, setTab] = useState("logs");
+  const [logs, setLogs] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = async (nextTab = tab) => {
+    setLoading(true);
+    try {
+      const data = await api(nextTab === "logs" ? "/admin/search-logs" : "/admin/users", {}, token);
+      if (nextTab === "logs") setLogs(data.logs || []);
+      else setUsers(data.users || []);
+    } catch (err) { onNotice(err.message); } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [tab]);
+
+  const removeUser = async (item) => {
+    const confirmation = window.prompt(`Type ${item.email} to permanently delete this user and all data.`);
+    if (confirmation !== item.email) return;
+    try {
+      await api(`/admin/users/${item.id}?confirm_email=${encodeURIComponent(item.email)}${item.role === "admin" ? "&confirm_admin=true" : ""}`, { method: "DELETE" }, token);
+      setUsers((current) => current.filter((user) => user.id !== item.id));
+      onNotice("User and associated data deleted.");
+    } catch (err) { onNotice(err.message); }
+  };
+
+  return <div className="notes-page admin-page">
+    <p className="eyebrow">ADMINISTRATION</p><h1>Admin console</h1>
+    <div className="admin-tabs"><button className={tab === "logs" ? "admin-tab admin-tab--active" : "admin-tab"} onClick={() => setTab("logs")}>Search Logs</button><button className={tab === "users" ? "admin-tab admin-tab--active" : "admin-tab"} onClick={() => setTab("users")}>Users</button></div>
+    {loading ? <p className="empty-sub">Loading…</p> : tab === "logs" ? <div className="admin-table">{logs.length === 0 ? <p className="empty-sub">No search logs yet.</p> : logs.map((log) => <article className="admin-row" key={log.id}><strong>{log.query_text}</strong><small>{log.user_id || "Guest"} · {new Date(log.created_at).toLocaleString()} · {log.latency_ms ?? "—"} ms</small></article>)}</div> : <div className="admin-table">{users.map((item) => <article className="admin-row" key={item.id}><div><strong>{item.email || item.id}</strong><small>{item.role}</small></div><button className="document-delete" onClick={() => removeUser(item)}>Delete</button></article>)}</div>}
+    <p className="admin-retention">Search queries are logged for service improvement and retained for 30 days.</p>
+  </div>;
+}
+
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(null);
@@ -134,6 +169,7 @@ function App() {
   const [documents, setDocuments] = useState([]);
   const [showNotes, setShowNotes] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -247,17 +283,18 @@ function App() {
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">⌘</span><span className="brand-name">Second Brain</span></div>
       <nav className="nav">
-        <div className={`nav-item ${!showNotes && !showLibrary ? "nav-item--active" : ""}`} onClick={() => { setShowNotes(false); setShowLibrary(false); }}>Chat</div>
+        <div className={`nav-item ${!showNotes && !showLibrary && !showAdmin ? "nav-item--active" : ""}`} onClick={() => { setShowNotes(false); setShowLibrary(false); setShowAdmin(false); }}>Chat</div>
         <label className="upload-card"><span className="upload-icon">↑</span><span><strong>{uploading ? "Indexing PDF…" : "Upload a PDF"}</strong><small>Private to your account</small></span><input type="file" accept="application/pdf" hidden disabled={uploading} onChange={(event) => { uploadPDF(event.target.files?.[0]); event.target.value = ""; }} /></label>
         <div className={`nav-item notes-link ${showLibrary ? "nav-item--active" : ""}`} onClick={() => { setShowLibrary(true); setShowNotes(false); }}>Library <span>{documents.length}</span></div>
         <div className={`nav-item notes-link ${showNotes ? "nav-item--active" : ""}`} onClick={() => { setShowNotes(true); setShowLibrary(false); }}>Notes <span>{notes.length}</span></div>
+        {user?.role === "admin" && <div className={`nav-item ${showAdmin ? "nav-item--active" : ""}`} onClick={() => { setShowAdmin(true); setShowNotes(false); setShowLibrary(false); }}>Admin</div>}
       </nav>
       <div className="account"><div className="avatar">{(user?.name || "G").charAt(0).toUpperCase()}</div><div><strong>{user?.name || "Guest"}</strong><small>{user?.is_guest ? "Guest session" : user?.email}</small></div><button onClick={signOut} title="Sign out">↗</button></div>
     </aside>
     <main className="stage">
       <header className="topbar"><span className="welcome">Hey, {user?.name || "there"}</span><span className="topbar-note">Your private knowledge space</span></header>
       <div className="scroll" ref={scrollRef}>
-        {showLibrary ? <div className="notes-page"><p className="eyebrow">YOUR PRIVATE DOCUMENTS</p><h1>Document library</h1><p className="empty-sub">Only PDFs uploaded from this account appear here.</p>{documents.length === 0 ? <div className="library-empty"><span>＋</span><strong>No PDFs yet</strong><small>Use “Upload a PDF” to add your first document.</small></div> : <div className="document-list">{documents.map((document) => <article className="document-item" key={document.id}><div className="document-icon">PDF</div><div className="document-info"><strong>{document.filename}</strong><small>{document.file_size ? `${(document.file_size / 1024 / 1024).toFixed(2)} MB` : "PDF"} · {document.created_at ? new Date(document.created_at).toLocaleDateString() : "Recently added"}</small></div><button className="document-delete" onClick={() => deleteDocument(document.id)} aria-label={`Delete ${document.filename}`}>Delete</button></article>)}</div>}</div> : showNotes ? <div className="notes-page"><p className="eyebrow">YOUR SAVED KNOWLEDGE</p><h1>Notes</h1>{notes.length === 0 ? <p className="empty-sub">Saved chats will appear here when you wishlist an answer.</p> : notes.map((note) => <article className="note-item" key={note.id}><div className="note-question">{note.question}</div><div className="note-answer"><ReactMarkdown>{note.answer}</ReactMarkdown></div><div className="note-date">{new Date(note.created_at).toLocaleString()}</div></article>)}</div> : <>
+        {showAdmin ? <AdminPanel token={token} onNotice={setNotice} /> : showLibrary ? <div className="notes-page"><p className="eyebrow">YOUR PRIVATE DOCUMENTS</p><h1>Document library</h1><p className="empty-sub">Only PDFs uploaded from this account appear here.</p>{documents.length === 0 ? <div className="library-empty"><span>＋</span><strong>No PDFs yet</strong><small>Use “Upload a PDF” to add your first document.</small></div> : <div className="document-list">{documents.map((document) => <article className="document-item" key={document.id}><div className="document-icon">PDF</div><div className="document-info"><strong>{document.filename}</strong><small>{document.file_size ? `${(document.file_size / 1024 / 1024).toFixed(2)} MB` : "PDF"} · {document.created_at ? new Date(document.created_at).toLocaleDateString() : "Recently added"}</small></div><button className="document-delete" onClick={() => deleteDocument(document.id)} aria-label={`Delete ${document.filename}`}>Delete</button></article>)}</div>}</div> : showNotes ? <div className="notes-page"><p className="eyebrow">YOUR SAVED KNOWLEDGE</p><h1>Notes</h1>{notes.length === 0 ? <p className="empty-sub">Saved chats will appear here when you wishlist an answer.</p> : notes.map((note) => <article className="note-item" key={note.id}><div className="note-question">{note.question}</div><div className="note-answer"><ReactMarkdown>{note.answer}</ReactMarkdown></div><div className="note-date">{new Date(note.created_at).toLocaleString()}</div></article>)}</div> : <>
         {messages.length === 0 && <div className="empty"><p className="empty-title">Ask your notes something.</p><p className="empty-sub">Answers are grounded in what you've actually written — with sources, every time.</p></div>}
         {messages.map((message, index) => <div key={index} className={`row row--${message.role}`}>{message.role === "user" ? <div className="bubble--user">{message.text}</div> : <div className={`card ${message.error ? "card--error" : ""}`}><div className="card-body"><ReactMarkdown>{message.text}</ReactMarkdown></div><div className="card-actions"><SourceList sources={message.sources} />{!message.error && <><div className="rating" aria-label="Rate answer">{[1, 2, 3, 4, 5].map((value) => <button key={value} className={value <= (message.rating || 0) ? "rating--selected" : ""} onClick={() => rateAnswer(index, value)} aria-label={`${value} out of 5`}>★</button>)}</div><button className={`wishlist ${message.saved ? "wishlist--saved" : ""}`} onClick={() => saveChat(index)}>{message.saved ? "♥ Saved in Notes" : "♡ Save to Notes"}</button></>}</div></div>}</div>)}
         {loading && <div className="row row--assistant"><div className="card card--pending"><div className="thinking"><span /><span /><span /></div></div></div>}

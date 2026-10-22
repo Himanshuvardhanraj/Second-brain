@@ -464,6 +464,61 @@ body {
   font-size: 12px;
 }
 
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.admin-tab {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.admin-tab--active {
+  background: var(--ink);
+  color: white;
+}
+
+.admin-table {
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.admin-row div,
+.admin-row strong {
+  min-width: 0;
+}
+
+.admin-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-retention {
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .note-item {
   background: var(--paper-raised);
   border: 1px solid var(--line);

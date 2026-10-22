@@ -39,11 +39,13 @@ def _session_user(user: Any) -> dict[str, Any]:
     user_id = get_value("id")
     email = get_value("email")
     metadata = get_value("user_metadata", {}) or {}
+    app_metadata = get_value("app_metadata", {}) or {}
     return {
         "sub": str(user_id),
         "email": email,
         "name": metadata.get("name") or email or "User",
         "is_guest": False,
+        "role": app_metadata.get("role", "user"),
     }
 
 
@@ -226,7 +228,7 @@ def optional_user(
 
 
 def create_guest_token() -> Dict[str, Any]:
-    guest = {"sub": f"guest_{uuid.uuid4()}", "email": None, "name": "Guest", "is_guest": True}
+    guest = {"sub": f"guest_{uuid.uuid4()}", "email": None, "name": "Guest", "is_guest": True, "role": "guest"}
     return {"access_token": _create_app_token(guest), "user": {"id": guest["sub"], "name": "Guest", "email": None, "is_guest": True}}
 
 
@@ -236,3 +238,11 @@ def revoke_token(token: str) -> None:
         _forget_session(claims["sid"])
     except (jwt.PyJWTError, KeyError, TypeError):
         return
+
+
+def require_role(role: str):
+    def dependency(user=Depends(current_user)):
+        if user.get("role") != role:
+            raise HTTPException(status_code=403, detail="Administrator access required")
+        return user
+    return dependency
