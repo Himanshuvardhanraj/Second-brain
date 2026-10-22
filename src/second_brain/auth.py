@@ -83,6 +83,7 @@ def _create_app_token(user: dict[str, Any]) -> str:
     payload = {
         "sid": session_id,
         "sub": user["sub"],
+        "is_guest": user.get("is_guest", False),
         "iat": now,
         "exp": now + timedelta(seconds=TOKEN_TTL_SECONDS),
     }
