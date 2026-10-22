@@ -371,6 +371,10 @@ HNSW cosine index on `document_chunks.embedding` and a B-tree index on
 hnsw.ef_search = 40` is session-scoped, so use it in the same SQL session as
 benchmarks or configure it separately at the database/role level if desired.
 
+Chat answers are streamed through `POST /api/chat/stream` as server-sent
+events. The existing `POST /api/chat` JSON endpoint remains available for
+clients that do not support streaming.
+
 For Vercel, deploy the `frontend` directory as the frontend project and set
 `VITE_API_URL` to the deployed backend URL, for example
 `https://second-brain-virid-eta.vercel.app`. Set `FRONTEND_URL` on the backend

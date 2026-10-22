@@ -26,8 +26,61 @@ class GeminiLLM:
         )
 
     def generate_answer(self, question: str, context: str) -> str:
+        prompt = self._prompt(question, context)
+        last_error = None
 
-        prompt = f"""
+        for attempt in range(2):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=1800,
+                        temperature=0.2,
+                    )
+                )
+
+                return response.text or (
+                    "I couldn't generate an answer from the retrieved context."
+                )
+            except Exception as e:
+                error_text = str(e)
+                if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+                    logger.warning("Gemini quota exhausted for model %s", self.model)
+                    raise GeminiQuotaError from e
+                last_error = e
+                if attempt < 1:
+                    time.sleep(2 ** attempt)
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("Gemini returned no answer")
+
+    def stream_answer(self, question: str, context: str):
+        prompt = self._prompt(question, context)
+        try:
+            response = self.client.models.generate_content_stream(
+                model=self.model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=1800,
+                    temperature=0.2,
+                ),
+            )
+            for chunk in response:
+                text = getattr(chunk, "text", None)
+                if text:
+                    yield text
+        except Exception as exc:
+            error_text = str(exc)
+            if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+                logger.warning("Gemini quota exhausted for model %s", self.model)
+                raise GeminiQuotaError from exc
+            raise
+
+    @staticmethod
+    def _prompt(question: str, context: str) -> str:
+        return f"""
 You are Second Brain, a personal knowledge assistant.
 
 Answer the user's question using ONLY the information
@@ -59,38 +112,3 @@ RETRIEVED CONTEXT:
 
 ANSWER:
 """
-
-        last_error = None
-
-        for attempt in range(2):
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        max_output_tokens=1800,
-                        temperature=0.2,
-                    )
-                )
-
-                answer = response.text or (
-                    "I couldn't generate an answer from the retrieved context."
-                )
-                if len(answer.strip()) >= 120 and answer.rstrip().endswith((".", "!", "?", ")")):
-                    return answer
-                return answer
-
-            except Exception as e:
-                error_text = str(e)
-                if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
-                    logger.warning("Gemini quota exhausted for model %s", self.model)
-                    raise GeminiQuotaError from e
-                last_error = e
-
-                if attempt < 2:
-                    wait_time = 2 ** attempt
-                    time.sleep(wait_time)
-
-        if last_error:
-            raise last_error
-        return answer

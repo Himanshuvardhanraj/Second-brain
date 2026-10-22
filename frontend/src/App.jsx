@@ -14,6 +14,34 @@ async function api(path, options = {}, token = localStorage.getItem(TOKEN_KEY)) 
   } catch {
     throw new Error("The backend is temporarily unavailable. Please try again.");
   }
+
+  async function streamChat(question, token, onEvent) {
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+    let response;
+    try {
+      response = await fetch(`${API_URL}/api/chat/stream`, {
+        method: "POST", headers, credentials: "include",
+        body: JSON.stringify({ question, top_k: 8 }),
+      });
+    } catch {
+      throw new Error("The backend is temporarily unavailable. Please try again.");
+    }
+    if (!response.ok || !response.body) throw new Error("The answer could not be generated. Please try again later.");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || "";
+      for (const event of events) {
+        const line = event.split("\n").find((part) => part.startsWith("data: "));
+        if (line) onEvent(JSON.parse(line.slice(6)));
+      }
+      if (done) break;
+    }
+  }
   const text = await response.text();
   let data = {};
   try { data = text ? JSON.parse(text) : {}; } catch { data = { detail: text }; }
@@ -195,8 +223,22 @@ function App() {
     const text = question.trim(); if (!text || loading) return;
     setMessages((current) => [...current, { role: "user", text }]); setQuestion(""); setLoading(true); setNotice("");
     try {
-      const data = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, top_k: 8 }) }, token);
-      setMessages((current) => [...current, { role: "assistant", text: data.answer, sources: data.sources || [], saved: false }]);
+      let assistantIndex = null;
+      await streamChat(text, token, (event) => {
+        if (event.type === "error") throw new Error(event.message);
+        if (event.type === "token") {
+          setMessages((current) => {
+            if (assistantIndex === null) {
+              assistantIndex = current.length;
+              return [...current, { role: "assistant", text: event.text, sources: [], saved: false }];
+            }
+            return current.map((message, index) => index === assistantIndex ? { ...message, text: message.text + event.text } : message);
+          });
+        }
+        if (event.type === "complete") {
+          setMessages((current) => current.map((message, index) => index === assistantIndex ? { ...message, sources: event.sources || [] } : message));
+        }
+      });
     } catch (err) { setMessages((current) => [...current, { role: "assistant", text: err.message, sources: [], error: true }]); setNotice(err.message); }
     finally { setLoading(false); inputRef.current?.focus(); }
   };

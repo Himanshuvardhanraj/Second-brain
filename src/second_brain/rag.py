@@ -1,4 +1,5 @@
 import logging
+from typing import Iterator
 from typing import List, Dict, Any
 
 from .supabase_client import supabase
@@ -173,3 +174,35 @@ Content:
             "answer": answer,
             "sources": sources
         }
+
+    def prepare_context(self, question: str, user_id: str, top_k: int = 8):
+        results = self.search(question, user_id, top_k)
+        if not results:
+            return "", []
+
+        context_parts = []
+        sources = []
+        for index, result in enumerate(results, start=1):
+            content = result.get("content", "")
+            filename = result.get("filename", "Unknown document")
+            page = result.get("page_number")
+            similarity = result.get("similarity", 0)
+            context_parts.append(
+                f"SOURCE {index}\nDocument: {filename}\nPage: {page}\n\nContent:\n{content}\n"
+            )
+            sources.append({
+                "source": filename,
+                "page": page,
+                "score": round(float(similarity), 4),
+            })
+        return "\n".join(context_parts), sources
+
+    def stream_query(self, question: str, user_id: str, top_k: int = 8):
+        context, sources = self.prepare_context(question, user_id, top_k)
+        if not context:
+            yield {"type": "token", "text": "I couldn't find relevant information in your uploaded documents."}
+            yield {"type": "complete", "sources": []}
+            return
+        for text in self.llm.stream_answer(question, context):
+            yield {"type": "token", "text": text}
+        yield {"type": "complete", "sources": sources}

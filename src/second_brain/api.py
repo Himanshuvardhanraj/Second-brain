@@ -1,6 +1,9 @@
 import os
+import json
+from typing import Iterator
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -56,15 +59,12 @@ def health():
 
 @app.post("/api/chat")
 def chat(request: QueryRequest, user=Depends(current_user)):
-
     try:
-
         return rag.query(
             request.question,
             user["sub"],
             top_k=request.top_k
         )
-
     except GeminiQuotaError as exc:
         raise HTTPException(
             status_code=429,
@@ -73,14 +73,32 @@ def chat(request: QueryRequest, user=Depends(current_user)):
                 "message": "AI answer generation is temporarily unavailable because the Gemini quota is exhausted. Please try again after the quota resets.",
             },
         ) from exc
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
             status_code=500,
             detail={
                 "code": "CHAT_UNAVAILABLE",
                 "message": "The answer could not be generated. Please try again later.",
             },
-        )
+        ) from exc
+
+
+@app.post("/api/chat/stream")
+def chat_stream(request: QueryRequest, user=Depends(current_user)):
+    def events() -> Iterator[str]:
+        try:
+            for event in rag.stream_query(request.question, user["sub"], request.top_k):
+                yield f"data: {json.dumps(event)}\n\n"
+        except GeminiQuotaError:
+            yield f"data: {json.dumps({'type': 'error', 'code': 'AI_QUOTA_EXHAUSTED', 'message': 'AI answer generation is temporarily unavailable because the Gemini quota is exhausted.'})}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'type': 'error', 'code': 'CHAT_UNAVAILABLE', 'message': 'The answer could not be generated. Please try again later.'})}\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 app.include_router(
