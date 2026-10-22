@@ -13,7 +13,7 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from second_brain.supabase_client import supabase
+from second_brain.supabase_client import supabase, supabase_auth
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def _profile(user: Any) -> dict[str, Any]:
 
 def signup(email: str, password: str, name: str | None) -> dict[str, Any]:
     try:
-        result = supabase.auth.sign_up(
+        result = supabase_auth.auth.sign_up(
             {"email": email, "password": password, "options": {"data": {"name": name or email}}}
         )
     except Exception as exc:
@@ -145,7 +145,7 @@ def signup(email: str, password: str, name: str | None) -> dict[str, Any]:
 
 def login(email: str, password: str) -> dict[str, Any]:
     try:
-        result = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        result = supabase_auth.auth.sign_in_with_password({"email": email, "password": password})
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid email or password") from exc
     session = getattr(result, "session", None)
@@ -157,7 +157,7 @@ def login(email: str, password: str) -> dict[str, Any]:
 
 def refresh(refresh_token: str) -> dict[str, Any]:
     try:
-        result = supabase.auth.refresh_session(refresh_token)
+        result = supabase_auth.auth.refresh_session(refresh_token)
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Session expired; please log in again") from exc
     session = getattr(result, "session", None)
@@ -183,7 +183,7 @@ def decode_token(token: str) -> Dict[str, Any]:
     # Registered-user tokens are Supabase JWTs and can be validated from any
     # Vercel serverless instance through Supabase Auth.
     try:
-        result = supabase.auth.get_user(token)
+        result = supabase_auth.auth.get_user(token)
         user = getattr(result, "user", None)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
