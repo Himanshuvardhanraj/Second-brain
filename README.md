@@ -364,6 +364,13 @@ keeps a legacy fallback so existing installations continue to work, but old
 unowned chunks may still appear in retrieval results. Re-upload documents after
 the migration to associate them with the account that uploaded them.
 
+For faster vector retrieval as the chunk count grows, run
+`supabase_hnsw_migration.sql` manually in Supabase SQL Editor. It creates an
+HNSW cosine index on `document_chunks.embedding` and a B-tree index on
+`document_chunks.user_id`; it is not run by the application. `SET
+hnsw.ef_search = 40` is session-scoped, so use it in the same SQL session as
+benchmarks or configure it separately at the database/role level if desired.
+
 For Vercel, deploy the `frontend` directory as the frontend project and set
 `VITE_API_URL` to the deployed backend URL, for example
 `https://second-brain-virid-eta.vercel.app`. Set `FRONTEND_URL` on the backend
