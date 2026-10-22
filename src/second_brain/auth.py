@@ -111,6 +111,11 @@ def _auth_response(user: dict[str, Any], session: Any) -> dict[str, Any]:
 
 def _profile(user: Any) -> dict[str, Any]:
     profile = _session_user(user)
+    sync_profile(profile)
+    return profile
+
+
+def sync_profile(profile: dict[str, Any]) -> None:
     try:
         supabase.table("users").upsert(
             {
@@ -126,7 +131,6 @@ def _profile(user: Any) -> dict[str, Any]:
         # Supabase Auth remains authoritative; a profile-table outage must not
         # turn a successful authentication into a misleading login failure.
         logger.warning("Could not synchronize the Supabase profile: %s", exc)
-    return profile
 
 
 def signup(email: str, password: str, name: str | None) -> dict[str, Any]:

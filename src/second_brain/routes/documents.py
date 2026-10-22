@@ -10,7 +10,7 @@ from pypdf import PdfReader
 
 from second_brain.supabase_client import supabase
 from second_brain.rag import RAGPipeline
-from second_brain.auth import current_user
+from second_brain.auth import current_user, sync_profile
 
 
 router = APIRouter(
@@ -157,6 +157,7 @@ async def upload_document(
 
     # 2. Insert document metadata
     try:
+        sync_profile(user)
         document_record = {
             "id": document_id,
             "filename": original_filename,
@@ -165,14 +166,7 @@ async def upload_document(
             "file_size": len(file_bytes),
             "user_id": user["sub"],
         }
-        try:
-            supabase.table("documents").insert(document_record).execute()
-        except Exception as insert_error:
-            if "user_id" not in str(insert_error).lower():
-                raise
-            logger.warning("Documents user_id column is not migrated; storing legacy metadata")
-            document_record.pop("user_id")
-            supabase.table("documents").insert(document_record).execute()
+        supabase.table("documents").insert(document_record).execute()
     except Exception as exc:
         logger.exception("PDF metadata insert failed for document %s", document_id)
         raise HTTPException(

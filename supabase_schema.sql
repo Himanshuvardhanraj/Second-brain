@@ -21,6 +21,11 @@ alter table public.users add column if not exists password_hash text;
 alter table public.documents add column if not exists user_id text;
 alter table public.document_chunks add column if not exists user_id text;
 
+-- Ownership is keyed by Supabase Auth's user UUID. Do not require a row in
+-- the legacy public.users profile table for uploads or retrieval.
+alter table public.documents drop constraint if exists documents_user_id_fkey;
+alter table public.document_chunks drop constraint if exists document_chunks_user_id_fkey;
+
 create table if not exists public.notes (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
