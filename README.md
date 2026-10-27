@@ -412,6 +412,22 @@ environment variables. The frontend must never receive `GEMINI_API_KEY` or
 `SUPABASE_SECRET_KEY`.
 
 
+### Alembic baseline and demo seed data
+
+The live Supabase schema predates Alembic and is the source of truth. Use a
+direct or session-pooler `DATABASE_URL`, never the transaction pooler. Back up
+the database, then record the existing schema with `alembic stamp head`; do not
+run the empty baseline as a schema-creation migration. Preview the follow-up
+index SQL with `alembic upgrade head --sql`. The index migration creates only
+five guarded indexes concurrently and its downgrade drops only those indexes.
+
+The optional seed script inserts 50 deterministic demo documents and their
+chunks using `user_id = 'seed-demo-user'`. It requires `SEED_ALLOWED=true`,
+prints the target host, and asks for a typed confirmation. Seed file paths are
+fake and do not correspond to Storage objects. Fake embeddings are
+schema-compatible but have no meaningful semantic similarity; use
+`--real-embeddings` only when Gemini credentials and quota are available.
+
 👨‍💻 Author
 
 Himanshu Raj
