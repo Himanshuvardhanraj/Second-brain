@@ -1,12 +1,16 @@
 import io
+import logging
+import re
+import unicodedata
 import uuid
 from typing import List, Dict
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pypdf import PdfReader
 
 from second_brain.supabase_client import supabase
 from second_brain.rag import RAGPipeline
+from second_brain.auth import current_user, sync_profile
 
 
 router = APIRouter(
@@ -15,38 +19,48 @@ router = APIRouter(
 )
 
 
+logger = logging.getLogger(__name__)
 rag = RAGPipeline()
+
+
+def ensure_documents_bucket():
+    try:
+        buckets = supabase.storage.list_buckets()
+        if any(getattr(bucket, "name", None) == "documents" for bucket in buckets):
+            return
+        if any(isinstance(bucket, dict) and bucket.get("name") == "documents" for bucket in buckets):
+            return
+        supabase.storage.create_bucket(
+            "documents",
+            options={"public": False, "file_size_limit": 52428800},
+        )
+    except Exception:
+        logger.exception("Could not verify the documents storage bucket")
+        raise
 
 
 def chunk_text(
     text: str,
-    chunk_size: int = 1000,
-    overlap: int = 150
+    chunk_size: int = 1400,
+    overlap: int = 220
 ) -> List[str]:
-
-    text = text.strip()
-
+    text = re.sub(r"[ \t]+", " ", text).strip()
     if not text:
         return []
 
+    paragraphs = [part.strip() for part in re.split(r"\n{2,}", text) if part.strip()]
     chunks = []
-
-    start = 0
-
-    while start < len(text):
-
-        end = start + chunk_size
-
-        chunk = text[start:end].strip()
-
-        if chunk:
-            chunks.append(chunk)
-
-        if end >= len(text):
-            break
-
-        start = end - overlap
-
+    current = ""
+    for paragraph in paragraphs:
+        if len(current) + len(paragraph) + 1 <= chunk_size:
+            current = f"{current}\n{paragraph}".strip()
+            continue
+        if current:
+            chunks.append(current)
+        tail = current[-overlap:] if current else ""
+        current = f"{tail}\n{paragraph}".strip()
+    if current:
+        chunks.append(current)
     return chunks
 
 
@@ -83,7 +97,8 @@ def extract_pdf_chunks(
 
 @router.post("/upload")
 async def upload_document(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    user=Depends(current_user),
 ):
 
     if not file.filename:
@@ -108,34 +123,65 @@ async def upload_document(
 
     document_id = str(uuid.uuid4())
 
-    storage_path = (
-        f"{document_id}/{file.filename}"
-    )
+    original_filename = file.filename
+    safe_filename = unicodedata.normalize("NFKD", original_filename).encode(
+        "ascii", "ignore"
+    ).decode("ascii")
+    safe_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_filename).strip("._")
+    if not safe_filename:
+        safe_filename = f"document-{document_id}.pdf"
+    storage_path = f"{user['sub']}/{document_id}/{safe_filename}"
 
     # 1. Upload original PDF
-    supabase.storage \
-        .from_("documents") \
-        .upload(
+    try:
+        ensure_documents_bucket()
+        bucket = supabase.storage.from_("documents")
+        bucket.upload(
             storage_path,
             file_bytes,
             {
-                "content-type": "application/pdf"
-            }
+                "content-type": "application/pdf",
+                "cache-control": "3600",
+                "upsert": "true",
+            },
         )
+    except Exception as exc:
+        logger.exception("PDF storage failed for document %s", document_id)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "PDF_STORAGE_UNAVAILABLE",
+                "message": "PDF storage is temporarily unavailable. Please try again later.",
+            },
+        ) from exc
 
     # 2. Insert document metadata
-    supabase.table("documents").insert({
-        "id": document_id,
-        "filename": file.filename,
-        "file_path": storage_path,
-        "file_type": file.content_type,
-        "file_size": len(file_bytes)
-    }).execute()
+    try:
+        sync_profile(user)
+        document_record = {
+            "id": document_id,
+            "filename": original_filename,
+            "file_path": storage_path,
+            "file_type": file.content_type,
+            "file_size": len(file_bytes),
+            "user_id": user["sub"],
+        }
+        supabase.table("documents").insert(document_record).execute()
+    except Exception as exc:
+        logger.exception("PDF metadata insert failed for document %s", document_id)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "PDF_METADATA_UNAVAILABLE",
+                "message": "The PDF could not be registered. Please try again later.",
+            },
+        ) from exc
 
     # 3. Extract + chunk
-    chunks = extract_pdf_chunks(
-        file_bytes
-    )
+    try:
+        chunks = extract_pdf_chunks(file_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="The uploaded file is not a readable PDF") from exc
 
     if not chunks:
         raise HTTPException(
@@ -144,14 +190,56 @@ async def upload_document(
         )
 
     # 4. Embed + store chunks
-    rag.add_chunks(
-        document_id,
-        chunks
-    )
+    try:
+        rag.add_chunks(document_id, user["sub"], chunks)
+    except Exception as exc:
+        logger.exception("PDF indexing failed for document %s", document_id)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "PDF_INDEXING_UNAVAILABLE",
+                "message": "The PDF was uploaded, but indexing is temporarily unavailable.",
+            },
+        ) from exc
 
     return {
         "message": "PDF uploaded and indexed successfully",
         "document_id": document_id,
-        "filename": file.filename,
+        "filename": original_filename,
         "chunks_created": len(chunks)
     }
+
+
+@router.get("")
+def list_documents(user=Depends(current_user)):
+    try:
+        response = (
+            supabase.table("documents").select("id,filename,file_path,file_type,file_size,created_at")
+            .eq("user_id", user["sub"]).order("created_at", desc=True).execute()
+        )
+        return {"documents": response.data or []}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not load your uploaded documents") from exc
+
+
+@router.delete("/{document_id}")
+def delete_document(document_id: str, user=Depends(current_user)):
+    try:
+        document_response = (
+            supabase.table("documents").select("id,file_path")
+            .eq("id", document_id).eq("user_id", user["sub"]).limit(1).execute()
+        )
+        document = document_response.data[0] if document_response.data else None
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        supabase.table("document_chunks").delete().eq("document_id", document_id).execute()
+        supabase.table("documents").delete().eq("id", document_id).eq("user_id", user["sub"]).execute()
+        if document.get("file_path"):
+            supabase.storage.from_("documents").remove([document["file_path"]])
+        return {"message": "Document deleted", "document_id": document_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Could not delete document %s", document_id)
+        raise HTTPException(status_code=502, detail="Could not delete this document") from exc
